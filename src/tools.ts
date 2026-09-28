@@ -44,7 +44,8 @@ export const formatValidationError = (error: Error): string => {
  * @param diff - 原始 diff 字符串
  * @returns 截断后的 diff 字符串
  */
-const truncateDiff = (diff: string): string => {
+/** 截断过长的 diff 输出，供 git-diff 工具与本地上下文收集复用 */
+export const truncateDiff = (diff: string): string => {
   // 按行拆分
   const lines = diff.split('\n')
   // 未超限则原样返回
