@@ -56,7 +56,13 @@ OpenCode 会在下次启动时自动安装。
 /commit -y subject 里带上模块名
 ```
 
-快速模式下提交结果以合成消息直接展示（不经确认交互），可用 `git reset --soft HEAD~1` 撤销。
+再加 `--push` 在提交成功后自动推送（无上游分支时自动 `--set-upstream`）：
+
+```
+/commit -y --push
+```
+
+`-y`/`--yes` 与 `--push` 可任意组合，其余文本作为生成的额外要求。快速模式下提交（与推送）结果以合成消息直接展示（不经确认交互），可用 `git reset --soft HEAD~1` 撤销。
 
 > 注：V1 的 `subtask`（子代理中执行命令）在 V2 插件命令上无对应字段，`/commit` 在当前会话内执行。如需子代理行为，可在 `.opencode/commands/` 自行定义命令文件（V2 配置层支持 `subagent: true`）。
 
