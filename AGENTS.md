@@ -1,171 +1,37 @@
-# OpenCode Plugin Development
+# AGENTS.md
 
-This is an OpenCode plugin. OpenCode is an AI-powered coding assistant that runs in the terminal.
+OpenCode 插件 `@gopowerteam/opencode-commit`：提供 `/commit` 命令和一组 git 工具，按约定式提交规范生成中文提交信息（含 emoji）。单包仓库，TypeScript ESM，Bun 工具链。
 
-## Documentation
+- 插件文档：https://opencode.ai/docs/plugins/ · SDK：https://opencode.ai/docs/sdk/
 
-- [Plugin Documentation](https://opencode.ai/docs/plugins/)
-- [SDK Reference](https://opencode.ai/docs/sdk/)
-- [Community Plugins](https://opencode.ai/docs/ecosystem/#plugins)
+## 常用命令
 
-## Project Structure
+- `bun install` — 用 bun 管理依赖（bun.lock 是唯一 lockfile；package.json 的 `packageManager` 字段写的 yarn 是无效残留，不要用 yarn/npm）
+- `bun dev` — 通过 `OPENCODE_CONFIG_CONTENT` 直接以 `src/index.ts` 源码加载插件启动 OpenCode（scripts/dev.ts），调试无需先 build
+- `bun typecheck` — `tsc --noEmit`（含 src 和 scripts）
+- `bun run build` — scripts/build.ts 两步：Bun.build 打包 `dist/index.js`（minified ESM，target bun），再 `bunx tsc -p tsconfig.build.json` 只生成 `.d.ts`
+- `bun run release` — bumpp 发布：提交 `chore: release v%s` → push → 执行 `bun run build && npm publish`
 
-```
-src/
-  index.ts    # Plugin entry point - exports the plugin function
-dev.ts        # Development script - runs OpenCode with this plugin loaded
-```
+**本仓库没有测试**。验证 = `bun typecheck` + `bun run build`。
 
-## Plugin Architecture
+## 发布陷阱
 
-A plugin is a function that receives a context object and returns hooks:
+- bumpp v11 只读 `bump.config.ts`；package.json 里的 `"bumpp"` 字段是旧残留、不生效。两处配置矛盾（`bump.config.ts` 的 `tag: false` vs package.json 的 `tag: "v%s"`），以 bump.config.ts 为准：**发布不打 git tag**
+- 只有 `dist/` 会发布（`files: ["dist"]` + .npmignore 排除 src、scripts、schema 等），发布前必须 build
 
-```typescript
-import type { Plugin, PluginInput } from '@opencode-ai/plugin'
+## 架构
 
-export const MyPlugin: Plugin = async (ctx: PluginInput) => {
-  // ctx provides:
-  // - client: OpenCode SDK client for API calls
-  // - project: Current project information
-  // - directory: Current working directory
-  // - worktree: Git worktree path
-  // - serverUrl: OpenCode server URL
-  // - $: Bun shell for executing commands
+- `src/index.ts` — 插件入口 `OpencodeCommitPlugin`。`config` 钩子注册 `/commit` 斜杠命令：其 `template` 字符串就是完整工作流提示词（收集 diff/status/log → generate 获取指南 → 生成信息 → validate → question 确认/重新生成/取消 → confirm 提交 → 检查 remote 询问 push）。**改 /commit 流程 = 改这段 template**
+- `src/tools.ts` — 9 个工具工厂：`commit-message-generate`、`commit-message-validate`、`commit-message-confirm`、`git-amend`、`git-diff`（有未暂存变更时自动 `git add -A`）、`git-log`、`git-push`、`git-status`、`git-undo`。所有 commit/amend 走 `commitAndReport`，提交前强制 validate
+- `src/config.ts` — 读取**用户项目**根目录的 `opencode-commit.json`（types / scopes / maxLength；默认 9 类型、maxLength 72），schema 见仓库根 `opencode-commit.schema.json`
+- `src/guide.ts` — 内置格式指南 `COMMIT_GUIDE`（`<type>: <emoji> <subject>`，emoji 在 subject 开头，subject ≤20 字，默认不写 body）；`MAX_DIFF_LINES = 500` 截断 diff。generate 工具优先读用户项目根目录的 `COMMITS.md` 作为自定义指南
+- `src/parser.ts` / `src/validator.ts` — 解析与校验 `<type>[(<scope>)]: <emoji> <subject>`，失败抛 `CommitError`（src/errors.ts，携带 suggestions 修正建议）
+- `src/safe.ts` — `safe` / `safeAsync` 返回 `Result` 类型，全仓库用它代替 try/catch，新代码保持一致
+- `.opencode/` 是 OpenCode 自动生成的插件安装目录（含 node_modules），不是源码，不要改
 
-  return {
-    // Return hooks here
-  }
-}
-```
+## 约定
 
-## Available Hooks
-
-### Event Hooks
-
-- `event` - Subscribe to OpenCode events (session.idle, file.edited, etc.)
-- `config` - Called when config is loaded
-
-### Chat Hooks
-
-- `chat.message` - Intercept user messages before processing
-- `chat.params` - Modify LLM parameters (temperature, topP, topK)
-- `chat.headers` - Add custom headers to LLM requests
-- `experimental.chat.messages.transform` - Transform messages before sending to AI
-- `experimental.chat.system.transform` - Transform system prompt
-
-### Tool Hooks
-
-- `tool.execute.before` - Modify tool arguments or block execution
-- `tool.execute.after` - Process tool results
-
-### Other Hooks
-
-- `command.execute.before` - Intercept slash commands
-- `permission.ask` - Auto-allow/deny permissions
-- `shell.env` - Inject environment variables
-- `experimental.session.compacting` - Customize session compaction
-- `experimental.text.complete` - Called when text completion is done
-
-### Custom Tools
-
-Plugins can register custom tools using the `tool` helper:
-
-```typescript
-import { tool } from '@opencode-ai/plugin'
-
-return {
-  tool: {
-    mytool: tool({
-      description: 'What this tool does',
-      args: {
-        input: tool.schema.string(),
-      },
-      async execute(args, context) {
-        return `Result: ${args.input}`
-      },
-    }),
-  },
-}
-```
-
-## Development Workflow
-
-1. Edit `src/index.ts` to implement your plugin logic
-2. Run `bun dev` to start OpenCode with your plugin loaded
-3. Test your plugin by interacting with OpenCode
-4. Run `bun typecheck` to verify types
-
-## Logging
-
-Use structured logging instead of console.log:
-
-```typescript
-await ctx.client.app.log({
-  body: {
-    service: 'my-plugin',
-    level: 'info', // 'debug' | 'info' | 'warn' | 'error'
-    message: 'Something happened',
-    extra: { key: 'value' },
-  },
-})
-```
-
-## Publishing
-
-1. Update `package.json` with your plugin name, description, and repository
-2. Run `npm publish`
-3. Users install by adding to their `opencode.json`:
-
-```json
-{
-  "plugin": ["your-plugin-name@latest"]
-}
-```
-
-## Common Patterns
-
-### Blocking Tool Execution
-
-```typescript
-'tool.execute.before': async (input, output) => {
-  if (input.tool === 'read' && output.args.filePath.includes('.env')) {
-    throw new Error('Cannot read .env files')
-  }
-}
-```
-
-### Auto-Approve Permissions
-
-```typescript
-'permission.ask': async (input, output) => {
-  if (input.tool === 'read') {
-    output.status = 'allow'
-  }
-}
-```
-
-### Send Notifications on Session Complete
-
-```typescript
-event: async ({ event }) => {
-  if (event.type === 'session.idle') {
-    await ctx.$`osascript -e 'display notification "Done!" with title "OpenCode"'`
-  }
-}
-```
-
-### Inject Environment Variables
-
-```typescript
-'shell.env': async (input, output) => {
-  output.env.MY_API_KEY = process.env.MY_API_KEY || ''
-}
-```
-
-### Modify LLM Temperature
-
-```typescript
-'chat.params': async (input, output) => {
-  output.temperature = 0.7
-}
-```
+- 代码注释、README、工具返回文案全部使用简体中文
+- 本仓库自己的提交也遵守插件自身格式：`type: emoji subject`（emoji 开头），如 `feat: ✨ 添加 git push 工具及 commit 后推送询问`
+- 校验类错误信息必须附带可操作的修正建议（`CommitError.suggestions`）
+- 插件要点：`ctx.$` 是 Bun Shell；参数 schema 用 `tool.schema`（zod 风格）；工具内可用 `context.metadata({ title })` 设置展示标题
