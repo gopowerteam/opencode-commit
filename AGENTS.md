@@ -23,8 +23,10 @@ OpenCode 插件 `@gopowerteam/opencode-commit`：提供 `/commit` 命令和一�
 ## 架构
 
 - `src/index.ts` — 插件入口，V2 形态 `export default Plugin.define({ id: 'opencode-commit', setup })`。setup 中加载配置后经 `ctx.command.transform` 注册 `/commit`、经 `ctx.tool.transform` 注册 9 个工具
-- `src/command.ts` — `/commit` 命令：`COMMIT_TEMPLATE` 是完整工作流提示词（收集 diff/status/log → generate 获取指南 → 生成信息 → validate → question 确认/重新生成/取消 → confirm 提交 → 检查 remote 询问 push），`execute` 内经 `ctx.session.prompt` 提交。**改 /commit 流程 = 改这段 template**
-- `src/tools.ts` — 9 个工具工厂（V2 工具定义：JSON Schema 参数、返回 `{ content }`、`context.progress({ title })` 设展示标题）：`commit-message-generate`、`commit-message-validate`、`commit-message-confirm`、`git-amend`、`git-diff`（有未暂存变更时自动 `git add -A`）、`git-log`、`git-push`、`git-status`、`git-undo`。所有 commit/amend 走 `commitAndReport`，提交前强制 validate；git 命令用 `import { $ } from 'bun'` 直接执行
+- `src/command.ts` — `/commit` 命令，**程序化编排**：`execute` 内本地收集上下文（collectGitContext）→ `ctx.generate.text` 单次生成 → 本地校验失败自动重试一次（generateValidMessage）→ `ctx.session.prompt` 发入确认提示词。模型解析 resolveModel：会话模型 → 宿主默认模型，不做任何 options 配置。生成/校验/重试的核心逻辑支持依赖注入，已被单测覆盖；失败兜底路径才交回会话内模型
+- `src/context.ts` — 本地 git 上下文收集（status/diff/log 并行思路、自动 `git add -A`、diff 截断复用 tools.ts 的 truncateDiff；git log 显式 UTF-8 输出防 locale 转义）
+- `src/prompt.ts` — 提示词构建纯函数：`buildGeneratePrompt`（指南+上下文+只输出指令）与 `buildConfirmPrompt`（question 确认 → confirm 提交 → push 询问）。**改生成/确认阶段的提示词 = 改这里**
+- `src/tools.ts` — 9 个工具工厂（V2 工具定义：JSON Schema 参数、返回 `{ content }`、`context.progress({ title })` 设展示标题）：`commit-message-generate`、`commit-message-validate`、`commit-message-confirm`、`git-amend`、`git-diff`（有未暂存变更时自动 `git add -A`）、`git-log`、`git-push`、`git-status`、`git-undo`。所有 commit/amend 走 `commitAndReport`，提交前强制 validate；git 命令用 `import { $ } from 'bun'` 直接执行。工具保留供会话内使用，`/commit` 命令的 happy path 已不依赖它们（仅 confirm/push 仍在确认阶段使用）
 - `src/config.ts` — 读取**用户项目**根目录的 `opencode-commit.json`（types / scopes / maxLength；默认 9 类型、maxLength 72），schema 见仓库根 `opencode-commit.schema.json`
 - `src/guide.ts` — 内置格式指南 `COMMIT_GUIDE`（`<type>: <emoji> <subject>`，emoji 在 subject 开头，subject ≤20 字，默认不写 body）；`MAX_DIFF_LINES = 500` 截断 diff。generate 工具优先读用户项目根目录的 `COMMITS.md` 作为自定义指南
 - `src/parser.ts` / `src/validator.ts` — 解析与校验 `<type>[(<scope>)]: <emoji> <subject>`，失败抛 `CommitError`（src/errors.ts，携带 suggestions 修正建议）
