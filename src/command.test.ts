@@ -4,32 +4,63 @@ import { extractMessage, generateValidMessage, parseCommitArgs, resolveModel } f
 
 describe('parseCommitArgs', () => {
   test('-y 标记快速模式', () => {
-    expect(parseCommitArgs('-y')).toEqual({ fast: true, extra: undefined })
+    expect(parseCommitArgs('-y')).toEqual({ fast: true, push: false, extra: undefined })
   })
 
   test('--yes 同样生效', () => {
-    expect(parseCommitArgs('--yes')).toEqual({ fast: true, extra: undefined })
+    expect(parseCommitArgs('--yes')).toEqual({ fast: true, push: false, extra: undefined })
   })
 
   test('-y 后可跟额外要求', () => {
     expect(parseCommitArgs('-y subject 里带上模块名')).toEqual({
       fast: true,
+      push: false,
       extra: 'subject 里带上模块名',
     })
   })
 
+  test('--push 单独使用：仅自动推送', () => {
+    expect(parseCommitArgs('--push')).toEqual({ fast: false, push: true, extra: undefined })
+  })
+
+  test('-y 与 --push 组合且顺序无关', () => {
+    expect(parseCommitArgs('-y --push')).toEqual({ fast: true, push: true, extra: undefined })
+    expect(parseCommitArgs('--push -y')).toEqual({ fast: true, push: true, extra: undefined })
+  })
+
+  test('标志与额外要求混排时其余文本聚合为 extra', () => {
+    expect(parseCommitArgs('-y --push 加上 scope')).toEqual({
+      fast: true,
+      push: true,
+      extra: '加上 scope',
+    })
+    expect(parseCommitArgs('加上 scope --push')).toEqual({
+      fast: false,
+      push: true,
+      extra: '加上 scope',
+    })
+  })
+
   test('普通文本非快速模式且作为额外要求', () => {
-    expect(parseCommitArgs('拆分为两个提交')).toEqual({ fast: false, extra: '拆分为两个提交' })
+    expect(parseCommitArgs('拆分为两个提交')).toEqual({
+      fast: false,
+      push: false,
+      extra: '拆分为两个提交',
+    })
   })
 
   test('空文本非快速模式', () => {
-    expect(parseCommitArgs('')).toEqual({ fast: false, extra: undefined })
-    expect(parseCommitArgs(undefined)).toEqual({ fast: false, extra: undefined })
-    expect(parseCommitArgs('   ')).toEqual({ fast: false, extra: undefined })
+    expect(parseCommitArgs('')).toEqual({ fast: false, push: false, extra: undefined })
+    expect(parseCommitArgs(undefined)).toEqual({ fast: false, push: false, extra: undefined })
+    expect(parseCommitArgs('   ')).toEqual({ fast: false, push: false, extra: undefined })
   })
 
   test('以 -y 开头但非独立标记不算快速模式', () => {
-    expect(parseCommitArgs('-yolo 模式')).toEqual({ fast: false, extra: '-yolo 模式' })
+    expect(parseCommitArgs('-yolo 模式')).toEqual({
+      fast: false,
+      push: false,
+      extra: '-yolo 模式',
+    })
   })
 })
 

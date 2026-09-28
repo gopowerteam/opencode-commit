@@ -41,30 +41,47 @@ const MAX_GENERATE_ATTEMPTS = 2
 type CommitArgs = {
   /** 是否跳过会话确认直接提交 */
   fast: boolean
+  /** 提交后是否自动推送 */
+  push: boolean
   /** 用户附加要求（可空） */
   extra?: string
+}
+
+/** /commit 支持的独立标志 token */
+const COMMIT_FLAGS: Record<string, keyof Omit<CommitArgs, 'extra'>> = {
+  '-y': 'fast',
+  '--yes': 'fast',
+  '--push': 'push',
 }
 
 /**
  * 解析 /commit 附加文本
  *
- * 首个 token 为 `-y` / `--yes` 时进入快速模式（跳过会话确认直接提交），
- * 其余文本作为生成阶段的额外要求；快速标记必须独立成词。
+ * 支持 `-y` / `--yes`（快速模式）与 `--push`（提交后自动推送）
+ * 任意组合、顺序无关；其余文本聚合为生成阶段的额外要求。
+ * 标志必须独立成词（如 `-yolo` 不算快速标记）。
  *
  * @param text - 用户在 /commit 后附加的原始文本（可空）
- * @returns 快速模式标记与额外要求
+ * @returns 标志与额外要求
  */
 export const parseCommitArgs = (text?: string): CommitArgs => {
   const trimmed = text?.trim() || ''
-  if (!trimmed) return { fast: false, extra: undefined }
+  if (!trimmed) return { fast: false, push: false, extra: undefined }
 
-  const firstToken = trimmed.split(/\s+/)[0]
-  if (firstToken === '-y' || firstToken === '--yes') {
-    const extra = trimmed.slice(firstToken.length).trim() || undefined
-    return { fast: true, extra }
+  const rest: string[] = []
+  const flags = { fast: false, push: false }
+
+  for (const token of trimmed.split(/\s+/)) {
+    const flag = COMMIT_FLAGS[token]
+    if (flag) {
+      flags[flag] = true
+    } else {
+      rest.push(token)
+    }
   }
 
-  return { fast: false, extra: trimmed }
+  const extra = rest.join(' ').trim() || undefined
+  return { fast: flags.fast, push: flags.push, extra }
 }
 
 /**
