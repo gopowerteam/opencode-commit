@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { Info } from '@opencode/plugin/promise/tool'
 import type { CommitConfig } from './config.js'
 import { CommitError } from './errors.js'
-import { COMMIT_GUIDE, MAX_DIFF_LINES } from './guide.js'
+import { COMMIT_GUIDE, MAX_DIFF_LINES, loadGuide } from './guide.js'
 import { safe, safeAsync } from './safe.js'
 import { validateCommitMessage } from './validator.js'
 
@@ -166,19 +166,9 @@ export const createGenerateTool = (config: CommitConfig, directory: string): V2T
     async execute(_input, context) {
       await context.progress({ title: '📋 返回提交格式指南' })
 
-      // 尝试读取项目自定义指南文件
-      const result = await safeAsync(async () => {
-        const content = await readFile(join(directory, 'COMMITS.md'), 'utf-8')
-        return content.trim()
-      })
-
-      // 自定义指南存在则返回
-      if (result.data) {
-        return { content: result.data }
-      }
-
-      // 降级为内置指南
-      return { content: COMMIT_GUIDE }
+      // COMMITS.md 优先，回退内置指南
+      const guide = await loadGuide(directory)
+      return { content: guide }
     },
   }
 }

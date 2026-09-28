@@ -8,7 +8,7 @@ export type Result<T, E> =
   | { data: null; error: E }
 
 /** 同步安全执行的结果类型，错误固定为 Error */
-type SafeResult<T> = Result<T, Error>
+export type SafeResult<T> = Result<T, Error>
 
 /**
  * 安全执行同步函数

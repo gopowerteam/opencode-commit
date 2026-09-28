@@ -37,8 +37,8 @@ export default Plugin.define({
     const directory = ctx.location.directory
     const commitConfig = await loadConfig(directory)
 
-    // 注册 /commit 斜杠命令
-    await registerCommitCommand(ctx)
+    // 注册 /commit 斜杠命令（程序化编排）
+    await registerCommitCommand(ctx, directory, commitConfig)
 
     // 注册全部自定义工具
     await ctx.tool.transform((editor) => {
