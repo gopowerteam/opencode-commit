@@ -40,17 +40,17 @@ export default Plugin.define({
     // 注册 /commit 斜杠命令（程序化编排）
     await registerCommitCommand(ctx, directory, commitConfig)
 
-    // 注册全部自定义工具
+    // 注册全部自定义工具（git 类工具显式绑定项目根目录）
     await ctx.tool.transform((editor) => {
       editor.add(createGenerateTool(commitConfig, directory)) // 生成提交格式指南
       editor.add(createValidateTool(commitConfig)) // 验证提交信息格式
-      editor.add(createConfirmTool(commitConfig)) // 确认并提交
-      editor.add(createAmendTool(commitConfig)) // 修改最近一次提交
-      editor.add(createDiffTool()) // 查看暂存区差异
-      editor.add(createLogTool()) // 查看提交历史
-      editor.add(createPushTool()) // 推送到远程仓库
-      editor.add(createStatusTool()) // 查看工作树状态
-      editor.add(createUndoTool()) // 撤销最近提交
+      editor.add(createConfirmTool(commitConfig, directory)) // 确认并提交
+      editor.add(createAmendTool(commitConfig, directory)) // 修改最近一次提交
+      editor.add(createDiffTool(directory)) // 查看暂存区差异
+      editor.add(createLogTool(directory)) // 查看提交历史
+      editor.add(createPushTool(directory)) // 推送到远程仓库
+      editor.add(createStatusTool(directory)) // 查看工作树状态
+      editor.add(createUndoTool(directory)) // 撤销最近提交
     })
   },
 })

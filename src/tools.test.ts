@@ -55,9 +55,9 @@ describe('commitAndReport', () => {
 
 describe('createConfirmTool', () => {
   test('提交信息未通过验证时拒绝提交并返回建议文案', async () => {
-    // maxLength: 10，消息远超限制 → 应在执行 git 前被验证拦截
+    // maxLength: 10，消息远超限制 → 应在执行 git 前被验证拦截（directory 不会被触达）
     const config: CommitConfig = { types: ['feat'], maxLength: 10 }
-    const tool = createConfirmTool(config)
+    const tool = createConfirmTool(config, '/tmp/opencode/unused')
 
     const result = await tool.execute(
       { message: 'feat: 这条提交信息远远超过十个字符的限制' },

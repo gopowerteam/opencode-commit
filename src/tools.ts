@@ -198,9 +198,10 @@ export const createGenerateTool = (config: CommitConfig, directory: string): V2T
  * 使用指定的提交信息执行 git commit，仅在用户确认后调用。
  *
  * @param config - 提交配置
+ * @param directory - 项目根目录（git 命令的工作目录）
  * @returns 工具定义
  */
-export const createConfirmTool = (config: CommitConfig): V2Tool => {
+export const createConfirmTool = (config: CommitConfig, directory: string): V2Tool => {
   return {
     name: 'commit-message-confirm',
     description: '使用指定的提交信息提交暂存的变更。仅在用户确认后才调用此工具。',
@@ -218,7 +219,7 @@ export const createConfirmTool = (config: CommitConfig): V2Tool => {
       await context.progress({ title: `🚀 ${message}` })
 
       // 执行提交并获取报告
-      const result = await commitAndReport(message, config, '')
+      const result = await commitAndReport(message, config, '', directory)
       if (!result.info) {
         // 无 info 表示提交失败，仅返回错误内容
         return { content: result.content }
@@ -236,9 +237,10 @@ export const createConfirmTool = (config: CommitConfig): V2Tool => {
  * 使用新的提交信息修改最近一次提交（git commit --amend）。
  *
  * @param config - 提交配置
+ * @param directory - 项目根目录（git 命令的工作目录）
  * @returns 工具定义
  */
-export const createAmendTool = (config: CommitConfig): V2Tool => {
+export const createAmendTool = (config: CommitConfig, directory: string): V2Tool => {
   return {
     name: 'git-amend',
     description: '使用新的验证过的提交信息修改最后一次提交',
@@ -256,7 +258,7 @@ export const createAmendTool = (config: CommitConfig): V2Tool => {
       await context.progress({ title: `📝 修改提交: ${message}` })
 
       // 执行 amend 提交
-      const result = await commitAndReport(message, config, '--amend')
+      const result = await commitAndReport(message, config, '--amend', directory)
       if (!result.info) {
         return { content: result.content }
       }
@@ -273,9 +275,10 @@ export const createAmendTool = (config: CommitConfig): V2Tool => {
  * 显示当前暂存的变更差异。如果存在未暂存的变更，会自动执行 git add -A
  * 将所有变更暂存后再显示 diff。
  *
+ * @param directory - 项目根目录（git 命令的工作目录）
  * @returns 工具定义
  */
-export const createDiffTool = (): V2Tool => {
+export const createDiffTool = (directory: string): V2Tool => {
   return {
     name: 'git-diff',
     description: '显示当前暂存的 diff。如果没有暂存的变更，会自动暂存所有变更。',
@@ -291,7 +294,7 @@ export const createDiffTool = (): V2Tool => {
       const showStaged = (input as { staged?: boolean }).staged !== false
 
       // 检查是否有未暂存的变更（工作区 vs 暂存区）
-      const unstagedResult = await safeAsync(() => $`git diff --stat`.text())
+      const unstagedResult = await safeAsync(() => inDir(directory, $`git diff --stat`).text())
       if (unstagedResult.error) {
         const msg = String(unstagedResult.error.message || unstagedResult.error)
         if (msg.includes('not a git repository')) {
@@ -302,13 +305,13 @@ export const createDiffTool = (): V2Tool => {
 
       // 存在未暂存变更时自动 add 所有变更
       if (unstagedResult.data?.trim()) {
-        await safeAsync(() => $`git add -A`.text())
+        await safeAsync(() => inDir(directory, $`git add -A`).text())
         await context.progress({ title: '📦 自动暂存变更...' })
       }
 
       // 根据参数选择查看暂存区或工作区差异
       const flag = showStaged ? '--staged' : ''
-      const result = await safeAsync(() => $`git diff ${flag}`.text())
+      const result = await safeAsync(() => inDir(directory, $`git diff ${flag}`).text())
       if (result.error) {
         return { content: `> 获取 diff 失败：${result.error.message}` }
       }
@@ -329,9 +332,10 @@ export const createDiffTool = (): V2Tool => {
  *
  * 显示最近 N 条提交历史，使用 oneline 格式。
  *
+ * @param directory - 项目根目录（git 命令的工作目录）
  * @returns 工具定义
  */
-export const createLogTool = (): V2Tool => {
+export const createLogTool = (directory: string): V2Tool => {
   return {
     name: 'git-log',
     description: '显示最近的提交历史',
@@ -346,7 +350,7 @@ export const createLogTool = (): V2Tool => {
       // 默认显示 10 条
       const count = (input as { count?: number }).count ?? 10
 
-      const result = await safeAsync(() => $`git log --oneline -n ${count}`.text())
+      const result = await safeAsync(() => inDir(directory, $`git log --oneline -n ${count}`).text())
       if (result.error) {
         return { content: `> 获取 git log 失败：${result.error.message}` }
       }
@@ -367,15 +371,16 @@ export const createLogTool = (): V2Tool => {
  *
  * 显示当前工作树状态，包括已暂存、未暂存和未跟踪的文件。
  *
+ * @param directory - 项目根目录（git 命令的工作目录）
  * @returns 工具定义
  */
-export const createStatusTool = (): V2Tool => {
+export const createStatusTool = (directory: string): V2Tool => {
   return {
     name: 'git-status',
     description: '显示工作树状态，包括暂存、未暂存和未跟踪的文件',
     input: emptyInput,
     async execute() {
-      const result = await safeAsync(() => $`git status`.text())
+      const result = await safeAsync(() => inDir(directory, $`git status`).text())
       if (result.error) {
         return { content: `> 获取 git status 失败：${result.error.message}` }
       }
@@ -390,9 +395,10 @@ export const createStatusTool = (): V2Tool => {
  *
  * 使用 git reset --soft 撤销最近的提交，变更保留在暂存区。
  *
+ * @param directory - 项目根目录（git 命令的工作目录）
  * @returns 工具定义
  */
-export const createUndoTool = (): V2Tool => {
+export const createUndoTool = (directory: string): V2Tool => {
   return {
     name: 'git-undo',
     description: '撤销最近的提交，保留变更在暂存区',
@@ -408,7 +414,7 @@ export const createUndoTool = (): V2Tool => {
       const count = (input as { count?: number }).count ?? 1
 
       // 软重置，保留变更在暂存区
-      const result = await safeAsync(() => $`git reset --soft HEAD~${count}`.text())
+      const result = await safeAsync(() => inDir(directory, $`git reset --soft HEAD~${count}`).text())
       if (result.error) {
         return { content: `> 撤销提交失败：${result.error.message}` }
       }
@@ -423,9 +429,10 @@ export const createUndoTool = (): V2Tool => {
  *
  * 执行 git push 并处理常见场景：无远程分支、需要 set-upstream 等。
  *
+ * @param directory - 项目根目录（git 命令的工作目录）
  * @returns 工具定义
  */
-export const createPushTool = (): V2Tool => {
+export const createPushTool = (directory: string): V2Tool => {
   return {
     name: 'git-push',
     description: '将当前分支推送到远程仓库',
@@ -434,13 +441,13 @@ export const createPushTool = (): V2Tool => {
       await context.progress({ title: '🚀 推送到远程仓库...' })
 
       // 检查是否有远程仓库
-      const remoteResult = await safeAsync(() => $`git remote`.text())
+      const remoteResult = await safeAsync(() => inDir(directory, $`git remote`).text())
       if (remoteResult.error || !remoteResult.data?.trim()) {
         return { content: '> 当前仓库没有配置远程仓库，无法推送。' }
       }
 
       // 执行 push
-      const result = await safeAsync(() => $`git push`.text())
+      const result = await safeAsync(() => inDir(directory, $`git push`).text())
       if (result.error) {
         const msg = String(result.error.message || result.error)
         // 没有上游分支
