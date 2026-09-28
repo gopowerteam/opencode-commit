@@ -55,5 +55,17 @@ describe('buildConfirmPrompt', () => {
     expect(prompt).toContain('commit-message-confirm')
     expect(prompt).toContain('不要重复询问')
   })
+
+  test('默认不包含推送环节', () => {
+    const prompt = buildConfirmPrompt({ message: 'feat: ✨ 添加用户登录功能' })
+    expect(prompt).not.toContain('git-push')
+  })
+
+  test('push 注入：确认后调用 git-push 并加入工具白名单', () => {
+    const prompt = buildConfirmPrompt({ message: 'feat: ✨ 添加用户登录功能', push: true })
+    expect(prompt).toContain('git-push')
+    // 白名单与步骤里都要有推送动作
+    expect(prompt).toContain('推送')
+  })
 })
 

@@ -6,7 +6,7 @@ import { CommitError } from './errors.js'
 import { loadGuide } from './guide.js'
 import { buildConfirmPrompt, buildGeneratePrompt } from './prompt.js'
 import { safeAsync } from './safe.js'
-import { commitAndReport } from './tools.js'
+import { commitAndReport, runPush } from './tools.js'
 import { validateCommitMessage } from './validator.js'
 
 /** 模型引用（与 GenerateTextInput.model 对齐） */
@@ -207,8 +207,8 @@ export const registerCommitCommand = async (
       name: 'commit',
       description: '根据变更内容生成中文提交信息，确认后提交',
       async execute(invocation) {
-        // 解析附加参数：-y/--yes 快速模式，其余文本作为额外要求
-        const { fast, extra } = parseCommitArgs(invocation.prompt.text)
+        // 解析附加参数：-y/--yes 快速模式、--push 自动推送，其余文本作为额外要求
+        const { fast, push, extra } = parseCommitArgs(invocation.prompt.text)
 
         // 解析生成所用模型
         const model = await resolveModel(ctx, invocation.sessionID)
@@ -267,9 +267,15 @@ export const registerCommitCommand = async (
         // 快速模式：跳过会话确认，本地直接提交，synthetic 报告结果（零模型往返）
         if (fast) {
           const result = await commitAndReport(generated.data, config, '', directory)
+          let report = result.content
+          // --push：提交成功后本地推送，结果并入同一份报告
+          if (push && result.info) {
+            const pushed = await runPush(directory)
+            report += `\n\n${pushed.content}`
+          }
           await ctx.session.synthetic({
             sessionID: invocation.sessionID,
-            text: `/commit 执行结果：\n\n${result.content}`,
+            text: `/commit 执行结果：\n\n${report}`,
           })
           return
         }
@@ -277,7 +283,7 @@ export const registerCommitCommand = async (
         // 确认阶段交回会话（V2 插件上下文无自建表单通道，question 工具是唯一宿主交互机制）
         await ctx.session.prompt({
           sessionID: invocation.sessionID,
-          text: buildConfirmPrompt({ message: generated.data }),
+          text: buildConfirmPrompt({ message: generated.data, push }),
           delivery: invocation.delivery,
         })
       },
