@@ -37,6 +37,7 @@
 	"devDependencies": {
 		"@opencode-ai/plugin": "^1.14.48",
 		"@opencode-ai/sdk": "^1.14.48",
+		"@opencode/plugin": "^2.0.18",
 		"@types/bun": "^1.3.8",
 		"bumpp": "^11.1.0",
 		"typescript": "^5.7.2"
