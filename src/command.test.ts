@@ -1,6 +1,37 @@
 import { describe, expect, test } from 'bun:test'
 import { CommitError } from './errors.js'
-import { extractMessage, generateValidMessage, resolveModel } from './command.js'
+import { extractMessage, generateValidMessage, parseCommitArgs, resolveModel } from './command.js'
+
+describe('parseCommitArgs', () => {
+  test('-y 标记快速模式', () => {
+    expect(parseCommitArgs('-y')).toEqual({ fast: true, extra: undefined })
+  })
+
+  test('--yes 同样生效', () => {
+    expect(parseCommitArgs('--yes')).toEqual({ fast: true, extra: undefined })
+  })
+
+  test('-y 后可跟额外要求', () => {
+    expect(parseCommitArgs('-y subject 里带上模块名')).toEqual({
+      fast: true,
+      extra: 'subject 里带上模块名',
+    })
+  })
+
+  test('普通文本非快速模式且作为额外要求', () => {
+    expect(parseCommitArgs('拆分为两个提交')).toEqual({ fast: false, extra: '拆分为两个提交' })
+  })
+
+  test('空文本非快速模式', () => {
+    expect(parseCommitArgs('')).toEqual({ fast: false, extra: undefined })
+    expect(parseCommitArgs(undefined)).toEqual({ fast: false, extra: undefined })
+    expect(parseCommitArgs('   ')).toEqual({ fast: false, extra: undefined })
+  })
+
+  test('以 -y 开头但非独立标记不算快速模式', () => {
+    expect(parseCommitArgs('-yolo 模式')).toEqual({ fast: false, extra: '-yolo 模式' })
+  })
+})
 
 describe('extractMessage', () => {
   test('剥离代码块围栏', () => {

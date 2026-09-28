@@ -6,6 +6,7 @@ import { CommitError } from './errors.js'
 import { loadGuide } from './guide.js'
 import { buildConfirmPrompt, buildGeneratePrompt } from './prompt.js'
 import { safeAsync } from './safe.js'
+import { commitAndReport } from './tools.js'
 import { validateCommitMessage } from './validator.js'
 
 /** 模型引用（与 GenerateTextInput.model 对齐） */
@@ -35,6 +36,36 @@ type FailedAttempt = {
 
 /** 重试上限：首次生成 + 一次修正重试 */
 const MAX_GENERATE_ATTEMPTS = 2
+
+/** 快速模式解析结果 */
+type CommitArgs = {
+  /** 是否跳过会话确认直接提交 */
+  fast: boolean
+  /** 用户附加要求（可空） */
+  extra?: string
+}
+
+/**
+ * 解析 /commit 附加文本
+ *
+ * 首个 token 为 `-y` / `--yes` 时进入快速模式（跳过会话确认直接提交），
+ * 其余文本作为生成阶段的额外要求；快速标记必须独立成词。
+ *
+ * @param text - 用户在 /commit 后附加的原始文本（可空）
+ * @returns 快速模式标记与额外要求
+ */
+export const parseCommitArgs = (text?: string): CommitArgs => {
+  const trimmed = text?.trim() || ''
+  if (!trimmed) return { fast: false, extra: undefined }
+
+  const firstToken = trimmed.split(/\s+/)[0]
+  if (firstToken === '-y' || firstToken === '--yes') {
+    const extra = trimmed.slice(firstToken.length).trim() || undefined
+    return { fast: true, extra }
+  }
+
+  return { fast: false, extra: trimmed }
+}
 
 /**
  * 从模型输出中提取提交信息
@@ -159,8 +190,8 @@ export const registerCommitCommand = async (
       name: 'commit',
       description: '根据变更内容生成中文提交信息，确认后提交',
       async execute(invocation) {
-        // 用户在 /commit 后附加的额外要求（可空）
-        const extra = invocation.prompt.text?.trim() || undefined
+        // 解析附加参数：-y/--yes 快速模式，其余文本作为额外要求
+        const { fast, extra } = parseCommitArgs(invocation.prompt.text)
 
         // 解析生成所用模型
         const model = await resolveModel(ctx, invocation.sessionID)
@@ -212,6 +243,16 @@ export const registerCommitCommand = async (
               '然后调用 commit-message-validate 验证，通过后用 question 工具让用户确认（选项：确认提交、重新生成、取消），' +
               '确认后调用 commit-message-confirm 提交。',
             delivery: invocation.delivery,
+          })
+          return
+        }
+
+        // 快速模式：跳过会话确认，本地直接提交，synthetic 报告结果（零模型往返）
+        if (fast) {
+          const result = await commitAndReport(generated.data, config, '')
+          await ctx.session.synthetic({
+            sessionID: invocation.sessionID,
+            text: `/commit 执行结果：\n\n${result.content}`,
           })
           return
         }

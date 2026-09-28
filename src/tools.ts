@@ -68,7 +68,7 @@ export const truncateDiff = (diff: string): string => {
  * @param flag - 额外的 commit 标志，空字符串表示普通提交，'--amend' 表示修改提交
  * @returns 成功时返回内容、最终标题与分支/hash 信息，失败时仅返回错误内容
  */
-const commitAndReport = async (
+export const commitAndReport = async (
   message: string,
   config: CommitConfig,
   flag: '' | '--amend',
