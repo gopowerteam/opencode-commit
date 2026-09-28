@@ -10,7 +10,8 @@ OpenCode 插件 - 根据 Git 变更自动生成中文约定式提交信息。
 - 单次 AI 调用生成提交信息，校验与失败重试在本地完成，速度远快于逐工具编排
 - 支持中文约定式提交格式（feat/fix/docs/style/refactor/perf/test/chore/revert）
 - 自动附加对应的 emoji
-- 交互式确认后再提交
+- 交互式确认后再提交，`-y` 快速模式可跳过确认
+- `--push` 提交成功后自动推送（无上游分支时自动 set-upstream）
 - 存在待提交变更（含未跟踪新文件）时自动 `git add -A`
 
 ## 安装
@@ -69,7 +70,7 @@ OpenCode 会在下次启动时自动安装。
 ### 提交信息格式
 
 ```
-<type>: <subject> <emoji>
+<type>: <emoji> <subject>
 ```
 
 | 类型 | 说明 | Emoji |
@@ -83,6 +84,8 @@ OpenCode 会在下次启动时自动安装。
 | test | 测试相关 | ✅ |
 | chore | 构建/依赖更新 | 🔧 |
 | revert | 回滚提交 | ⏪ |
+
+示例：`feat: ✨ 添加用户登录功能`
 
 ## 开发
 
