@@ -425,6 +425,49 @@ export const createUndoTool = (directory: string): V2Tool => {
 }
 
 /**
+ * 推送当前分支到远程仓库（git-push 工具与 /commit --push 共用）
+ *
+ * 无远程仓库时返回提示文案（不算成功）；push 因缺少上游分支失败时，
+ * 自动以 `--set-upstream origin <当前分支>` 重试一次。
+ * push 的关键提示（upstream/rejected 等）在 stderr，必须用
+ * nothrow+quiet 才能完整拿到，否则错误分支永不生效。
+ *
+ * @param directory - 项目根目录（git 命令的工作目录）
+ * @returns ok 为是否推送成功；content 为面向用户的文案
+ */
+export const runPush = async (directory: string): Promise<{ ok: boolean; content: string }> => {
+  // 检查是否有远程仓库
+  const remote = await inDir(directory, $`git remote`).nothrow().quiet()
+  if (remote.exitCode !== 0 || !remote.stdout.toString().trim()) {
+    return { ok: false, content: '> 当前仓库没有配置远程仓库，无法推送。' }
+  }
+
+  // 执行 push
+  let pushed = await inDir(directory, $`git push`).nothrow().quiet()
+  const outputOf = (r: typeof pushed) => `${r.stdout}${r.stderr}`.trim()
+
+  // 缺少上游分支：自动以 --set-upstream origin <当前分支> 重试一次
+  if (pushed.exitCode !== 0 && /upstream|set-upstream/i.test(outputOf(pushed))) {
+    const branch = await inDir(directory, $`git branch --show-current`).nothrow().quiet()
+    const name = branch.stdout.toString().trim()
+    if (name) {
+      pushed = await inDir(directory, $`git push --set-upstream origin ${name}`).nothrow().quiet()
+    }
+  }
+
+  if (pushed.exitCode !== 0) {
+    const output = outputOf(pushed)
+    // 被拒绝（可能需要 pull）
+    if (/rejected/i.test(output)) {
+      return { ok: false, content: '> 推送被拒绝，远程仓库有新的变更。请先执行：git pull --rebase' }
+    }
+    return { ok: false, content: `> 推送失败：${output || `git push 退出码 ${pushed.exitCode}`}` }
+  }
+
+  return { ok: true, content: `✅ 推送成功！\n\n\`\`\`\n${outputOf(pushed)}\n\`\`\`` }
+}
+
+/**
  * 创建 git push 工具
  *
  * 执行 git push 并处理常见场景：无远程分支、需要 set-upstream 等。
@@ -439,29 +482,7 @@ export const createPushTool = (directory: string): V2Tool => {
     input: emptyInput,
     async execute(_input, context) {
       await context.progress({ title: '🚀 推送到远程仓库...' })
-
-      // 检查是否有远程仓库
-      const remoteResult = await safeAsync(() => inDir(directory, $`git remote`).text())
-      if (remoteResult.error || !remoteResult.data?.trim()) {
-        return { content: '> 当前仓库没有配置远程仓库，无法推送。' }
-      }
-
-      // 执行 push
-      const result = await safeAsync(() => inDir(directory, $`git push`).text())
-      if (result.error) {
-        const msg = String(result.error.message || result.error)
-        // 没有上游分支
-        if (msg.includes('upstream') || msg.includes('set-upstream')) {
-          return { content: '> 当前分支没有设置上游分支。请先执行：git push --set-upstream origin <branch-name>' }
-        }
-        // 被拒绝（可能需要 pull）
-        if (msg.includes('rejected')) {
-          return { content: '> 推送被拒绝，远程仓库有新的变更。请先执行：git pull --rebase' }
-        }
-        return { content: `> 推送失败：${msg}` }
-      }
-
-      return { content: `✅ 推送成功！\n\n\`\`\`\n${result.data.trim()}\n\`\`\`` }
+      return await runPush(directory)
     },
   }
 }

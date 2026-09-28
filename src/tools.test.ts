@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { $ } from 'bun'
-import { commitAndReport, createConfirmTool } from './tools.js'
+import { commitAndReport, createConfirmTool, runPush } from './tools.js'
 import type { CommitConfig } from './config.js'
 
 /** 测试用提交配置 */
@@ -49,6 +49,75 @@ describe('commitAndReport', () => {
       expect(result.content).toContain('没有需要提交的变更')
     } finally {
       await rm(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('runPush', () => {
+  /** 建一对 bare 远程 + 本地工作仓库（本地含一次提交），返回两者路径 */
+  const initRemotePair = async (): Promise<{ remote: string; local: string }> => {
+    const remote = await mkdtemp(join(tmpdir(), 'opencode', 'push-remote-'))
+    await $`git init -q --bare`.cwd(remote).quiet()
+    const local = await mkdtemp(join(tmpdir(), 'opencode', 'push-local-'))
+    await $`git init -q`.cwd(local).quiet()
+    await $`git config user.email t@t`.cwd(local).quiet()
+    await $`git config user.name t`.cwd(local).quiet()
+    await $`git remote add origin ${remote}`.cwd(local).quiet()
+    await writeFile(join(local, 'a.txt'), 'hello\n')
+    await $`git add -A`.cwd(local).quiet()
+    const msg = 'chore: 🔧 初始化项目'
+    await $`git commit -q -m ${msg}`.cwd(local).quiet()
+    return { remote, local }
+  }
+
+  test('无远程仓库时返回提示文案且不算成功', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'opencode', 'push-noremote-'))
+    try {
+      await $`git init -q`.cwd(dir).quiet()
+      const result = await runPush(dir)
+      expect(result.ok).toBe(false)
+      expect(result.content).toContain('没有配置远程仓库')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('缺少上游分支时自动 set-upstream 重试一次', async () => {
+    const { remote, local } = await initRemotePair()
+    try {
+      // 首次推送：分支无 upstream → 应自动以 --set-upstream 重试并成功
+      const result = await runPush(local)
+      expect(result.ok).toBe(true)
+      expect(result.content).toContain('推送成功')
+
+      // 推送确实落到远端
+      const remoteLog = await $`git log --oneline`.cwd(remote).text()
+      expect(remoteLog).toContain('chore: 🔧 初始化项目')
+    } finally {
+      await rm(remote, { recursive: true, force: true })
+      await rm(local, { recursive: true, force: true })
+    }
+  })
+
+  test('已有上游分支时直接推送成功', async () => {
+    const { remote, local } = await initRemotePair()
+    try {
+      // 先手动建立 upstream，第二次推送走常规路径
+      await $`git push --set-upstream origin master`.cwd(local).nothrow().quiet()
+      await writeFile(join(local, 'b.txt'), 'second\n')
+      await $`git add -A`.cwd(local).quiet()
+      const msg = 'feat: ✨ 第二次提交'
+      await $`git commit -q -m ${msg}`.cwd(local).quiet()
+
+      const result = await runPush(local)
+      expect(result.ok).toBe(true)
+      expect(result.content).toContain('推送成功')
+
+      const remoteLog = await $`git log --oneline`.cwd(remote).text()
+      expect(remoteLog).toContain('feat: ✨ 第二次提交')
+    } finally {
+      await rm(remote, { recursive: true, force: true })
+      await rm(local, { recursive: true, force: true })
     }
   })
 })
