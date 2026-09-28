@@ -23,7 +23,7 @@ OpenCode 插件 `@gopowerteam/opencode-commit`：提供 `/commit` 命令和一�
 ## 架构
 
 - `src/index.ts` — 插件入口，V2 形态 `export default Plugin.define({ id: 'opencode-commit', setup })`。setup 中加载配置后经 `ctx.command.transform` 注册 `/commit`、经 `ctx.tool.transform` 注册 9 个工具
-- `src/command.ts` — `/commit` 命令，**程序化编排**：`execute` 内本地收集上下文（collectGitContext）→ `ctx.generate.text` 单次生成 → 本地校验失败自动重试一次（generateValidMessage）→ `ctx.session.prompt` 发入确认提示词。模型解析 resolveModel：会话模型 → 宿主默认模型，不做任何 options 配置。生成/校验/重试的核心逻辑支持依赖注入，已被单测覆盖；失败兜底路径才交回会话内模型
+- `src/command.ts` — `/commit` 命令，**程序化编排**：`execute` 内本地收集上下文（collectGitContext）→ `ctx.generate.text` 单次生成 → 本地校验失败自动重试一次（generateValidMessage）→ `ctx.session.prompt` 发入确认提示词。`parseCommitArgs` 解析附加文本：`-y`/`--yes` 为快速模式（本地直接 commitAndReport + `ctx.session.synthetic` 报告结果，跳过确认交互）。模型解析 resolveModel：会话模型 → 宿主默认模型，不做任何 options 配置。生成/校验/重试的核心逻辑支持依赖注入，已被单测覆盖；失败兜底路径才交回会话内模型
 - `src/context.ts` — 本地 git 上下文收集（status/diff/log、待提交变更（含 untracked）自动 `git add -A`、git log 显式 UTF-8 输出防 locale 转义；diff ≤200 行全量，超长降级为 `--stat` 摘要 + 150 行片段）
 - `src/prompt.ts` — 提示词构建纯函数：`buildGeneratePrompt`（指南+上下文+只输出指令）与 `buildConfirmPrompt`（question 确认 → confirm 提交 → push 询问，含防摇摆指令：声明"用户已通过 /commit 授权提交"、限定工具白名单、禁止重复询问——真机验证模型回复后 5s 内完成提交）。**改生成/确认阶段的提示词 = 改这里**。V2 插件上下文无自建表单通道（无 client 域、SessionDomain 无 form、permission 不能主动发起），确认交互只能走会话内 question 工具
 - `src/tools.ts` — 9 个工具工厂（V2 工具定义：JSON Schema 参数、返回 `{ content }`、`context.progress({ title })` 设展示标题）：`commit-message-generate`、`commit-message-validate`、`commit-message-confirm`、`git-amend`、`git-diff`（有未暂存变更时自动 `git add -A`）、`git-log`、`git-push`、`git-status`、`git-undo`。所有 commit/amend 走 `commitAndReport`，提交前强制 validate；git 命令用 `import { $ } from 'bun'` 直接执行。工具保留供会话内使用，`/commit` 命令的 happy path 已不依赖它们（仅 confirm/push 仍在确认阶段使用）

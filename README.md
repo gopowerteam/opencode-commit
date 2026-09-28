@@ -47,6 +47,17 @@ OpenCode 会在下次启动时自动安装。
 3. 展示供你确认
 4. 确认后执行 `git commit`
 
+### 快速模式
+
+日常小变更可用 `-y` 跳过确认，生成校验通过后直接提交：
+
+```
+/commit -y
+/commit -y subject 里带上模块名
+```
+
+快速模式下提交结果以合成消息直接展示（不经确认交互），可用 `git reset --soft HEAD~1` 撤销。
+
 > 注：V1 的 `subtask`（子代理中执行命令）在 V2 插件命令上无对应字段，`/commit` 在当前会话内执行。如需子代理行为，可在 `.opencode/commands/` 自行定义命令文件（V2 配置层支持 `subagent: true`）。
 
 ### 提交信息格式
