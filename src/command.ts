@@ -206,7 +206,7 @@ export const registerCommitCommand = async (
 
         // 本地读取格式指南（COMMITS.md 优先）与 git 上下文
         const guide = await loadGuide(directory)
-        const collected = await collectGitContext()
+        const collected = await collectGitContext(directory)
 
         if (collected.error) {
           await ctx.session.prompt({
@@ -249,7 +249,7 @@ export const registerCommitCommand = async (
 
         // 快速模式：跳过会话确认，本地直接提交，synthetic 报告结果（零模型往返）
         if (fast) {
-          const result = await commitAndReport(generated.data, config, '')
+          const result = await commitAndReport(generated.data, config, '', directory)
           await ctx.session.synthetic({
             sessionID: invocation.sessionID,
             text: `/commit 执行结果：\n\n${result.content}`,

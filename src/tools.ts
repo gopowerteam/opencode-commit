@@ -58,6 +58,17 @@ export const truncateDiff = (diff: string): string => {
 }
 
 /**
+ * 绑定 git 命令的工作目录
+ *
+ * 插件代码运行在宿主进程内，git 命令的工作目录必须显式
+ * 指向用户项目根目录，否则多项目后台服务下会操作错误目录。
+ *
+ * @param cwd - 项目根目录；缺省时保持进程当前目录
+ * @param cmd - Bun Shell 命令模板
+ */
+const inDir = (cwd: string | undefined, cmd: ReturnType<typeof $>) => (cwd ? cmd.cwd(cwd) : cmd)
+
+/**
  * 执行 git commit 并报告结果
  *
  * 内部会先验证提交信息格式，然后执行 git commit，
@@ -66,12 +77,14 @@ export const truncateDiff = (diff: string): string => {
  * @param message - 提交信息
  * @param config - 提交配置
  * @param flag - 额外的 commit 标志，空字符串表示普通提交，'--amend' 表示修改提交
+ * @param cwd - 执行 git 的项目根目录；缺省为进程当前目录
  * @returns 成功时返回内容、最终标题与分支/hash 信息，失败时仅返回错误内容
  */
 export const commitAndReport = async (
   message: string,
   config: CommitConfig,
   flag: '' | '--amend',
+  cwd?: string,
 ): Promise<{ content: string; title?: string; info?: { branch: string; hash: string } }> => {
   // 提交前先验证格式
   const validation = safe(() => validateCommitMessage(message, config))
@@ -79,28 +92,34 @@ export const commitAndReport = async (
     return { content: formatValidationError(validation.error) }
   }
 
-  // 根据 flag 决定执行普通提交还是 amend 提交
-  const cmd = flag === '--amend' ? $`git commit --amend -m ${message}` : $`git commit -m ${message}`
-  const result = await safeAsync(() => cmd.text())
-  if (result.error) {
-    // 将错误转为字符串
-    const msg = String(result.error.message || result.error)
-    // 没有变更可提交
-    if (msg.includes('nothing to commit')) {
+  // 根据 flag 决定执行普通提交还是 amend 提交。
+  // 用 nothrow+quiet 拿完整输出：text() 抛错会丢弃 stdout，
+  // 导致 "无文件要提交 / nothing to commit" 等文案分支失效
+  const cmd =
+    flag === '--amend'
+      ? inDir(cwd, $`git commit --amend -m ${message}`)
+      : inDir(cwd, $`git commit -m ${message}`)
+  const result = await cmd.nothrow().quiet()
+  if (result.exitCode !== 0) {
+    // 合并 stdout 与 stderr（git 的提示文案多在 stdout）
+    const output = `${result.stdout}${result.stderr}`.trim()
+    const msg = output || `git commit 退出码 ${result.exitCode}`
+    // 没有变更可提交（中英文 git 环境均覆盖）
+    if (/无文件要提交|nothing to commit/.test(output)) {
       return { content: '> 没有需要提交的变更。' }
     }
     // pre-commit hook 失败
-    if (msg.includes('pre-commit') || msg.includes('hook')) {
-      return { content: `> Pre-commit hook 失败：${msg}` }
+    if (/pre-commit|hook/i.test(output)) {
+      return { content: `> Pre-commit hook 失败：${output}` }
     }
     // 其他错误
     return { content: `> 提交失败：${msg}` }
   }
 
   // 获取提交后的短 hash
-  const hashResult = await safeAsync(() => $`git rev-parse --short HEAD`.text())
+  const hashResult = await safeAsync(() => inDir(cwd, $`git rev-parse --short HEAD`).text())
   // 获取当前分支名
-  const branchResult = await safeAsync(() => $`git branch --show-current`.text())
+  const branchResult = await safeAsync(() => inDir(cwd, $`git branch --show-current`).text())
 
   // 提取并清理 hash 和分支名
   const hash = hashResult.data?.trim() ?? 'unknown'
@@ -110,7 +129,7 @@ export const commitAndReport = async (
   const action = flag === '--amend' ? '修改成功' : '提交成功'
 
   return {
-    content: `✅ ${action}！\n- 分支: ${branch}\n- Hash: ${hash}\n\n${result.data}`,
+    content: `✅ ${action}！\n- 分支: ${branch}\n- Hash: ${hash}\n\n${result.stdout}`,
     title: `✅ ${message}`,
     info: { branch, hash },
   }
