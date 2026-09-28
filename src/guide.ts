@@ -7,49 +7,15 @@ import { join } from 'node:path'
  * 当项目根目录不存在 COMMITS.md 自定义指南时，
  * 使用此默认指南作为提交信息生成参考。
  */
-export const COMMIT_GUIDE = `## 提交信息格式要求
+export const COMMIT_GUIDE = `## 提交信息格式（严格遵循）
 
-你必须严格按照以下规范生成提交信息。
+格式：\`<type>: <emoji> <subject>\`
+类型：feat ✨ / fix 🐛 / docs 📝 / style 💄 / refactor ♻️ / perf ⚡ / test ✅ / chore 🔧 / revert ⏪
+- 中文 subject，20 字以内，不加句号，emoji 放在 subject 开头
+- 默认不写 body；仅当变更涉及 3 个以上独立模块且 subject 无法涵盖时，用最多 3 条 "- " 列出关键项
+示例：feat: ✨ 添加用户登录功能
 
-### 格式
-\`\`\`
-<type>: <emoji> <subject>
-\`\`\`
-
-### 类型与对应 emoji
-- feat: 新功能 ✨
-- fix: 修复 bug 🐛
-- docs: 文档更新 📝
-- style: 代码格式化 💄
-- refactor: 重构代码 ♻️
-- perf: 性能优化 ⚡
-- test: 测试相关 ✅
-- chore: 构建/依赖更新 🔧
-- revert: 回滚提交 ⏪
-
-### 规则
-1. 提交信息使用中文
-2. subject 简洁总结变更，20 字以内，不加句号
-3. emoji 放在 subject 开头
-4. **不要写 body**。除非变更涉及 3 个以上独立模块且 subject 无法涵盖，才用 body 列出关键项（"- " 开头，最多 3 条）
-5. 根据变更选择最合适的 type 和 emoji
-
-### 示例
-\`\`\`
-feat: ✨ 添加用户登录功能
-\`\`\`
-\`\`\`
-fix: 🐛 修复首页白屏问题
-\`\`\`
-\`\`\`
-chore: 🔧 升级依赖版本
-\`\`\`
-\`\`\`
-refactor: ♻️ 重构用户模块
-- 拆分认证逻辑为独立服务
-- 提取公共权限校验函数
-- 统一错误处理策略
-\`\`\``
+只输出提交信息本身，不要任何解释、引号或代码块标记。`
 
 /** diff 输出的最大行数限制，超过此值将截断 */
 export const MAX_DIFF_LINES = 500

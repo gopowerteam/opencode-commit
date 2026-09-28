@@ -3,8 +3,7 @@ import { mkdtemp, rm, writeFile, appendFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { $ } from 'bun'
-import { collectGitContext } from './context.js'
-import { MAX_DIFF_LINES } from './guide.js'
+import { collectGitContext, DIFF_COMPACT_LINES, DIFF_FULL_LIMIT } from './context.js'
 
 /** 测试用临时 git 仓库根目录 */
 let repoDir: string
@@ -87,9 +86,21 @@ describe('collectGitContext', () => {
     expect(result.data.log).toContain('chore: 🔧 清理测试变更')
   })
 
-  test('超过 MAX_DIFF_LINES 的 diff 被截断并附省略提示', async () => {
-    // 生成超过 500 行的变更
-    const lines = Array.from({ length: MAX_DIFF_LINES + 100 }, (_, i) => `line ${i}\n`)
+  test('中等 diff（≤ 全量阈值）完整保留', async () => {
+    const lines = Array.from({ length: DIFF_FULL_LIMIT - 80 }, (_, i) => `line ${i}\n`)
+    await writeFile(join(repoDir, 'mid.txt'), lines.join(''))
+    await $`git add -A`.cwd(repoDir)
+
+    const result = await collectGitContext(repoDir)
+
+    expect(result.error).toBeNull()
+    if (result.error) return
+    expect(result.data.diff).not.toContain('已截断')
+    expect(result.data.diff.split('\n').length).toBeGreaterThan(DIFF_FULL_LIMIT - 90)
+  })
+
+  test('超长 diff 降级为 stat 摘要 + 片段', async () => {
+    const lines = Array.from({ length: DIFF_FULL_LIMIT + 200 }, (_, i) => `line ${i}\n`)
     await writeFile(join(repoDir, 'big.txt'), lines.join(''))
     await $`git add -A`.cwd(repoDir)
 
@@ -97,10 +108,12 @@ describe('collectGitContext', () => {
 
     expect(result.error).toBeNull()
     if (result.error) return
-    expect(result.data.diff.split('\n').length).toBeLessThanOrEqual(MAX_DIFF_LINES + 5)
-    expect(result.data.diff).toContain('已截断')
+    const diff = result.data.diff
+    // stat 摘要含文件行；片段含截断说明；整体行数受控
+    expect(diff).toContain('big.txt')
+    expect(diff).toContain('已截断')
+    expect(diff.split('\n').length).toBeLessThan(DIFF_FULL_LIMIT)
   })
-
   test('非 git 仓库返回 error', async () => {
     const plainDir = await mkdtemp(join(TMP_ROOT, 'not-repo-'))
     try {
