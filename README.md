@@ -14,6 +14,8 @@ OpenCode 插件 - 根据 Git 变更自动生成中文约定式提交信息。
 
 ## 安装
 
+> 仅支持 OpenCode v2。V1 的 `plugin` 配置键已改为 `plugins`。
+
 使用 CLI 命令安装：
 
 ```bash
@@ -24,7 +26,7 @@ opencode plugin @gopowerteam/opencode-commit -g
 
 ```json
 {
-  "plugin": ["@gopowerteam/opencode-commit@latest"]
+  "plugins": ["@gopowerteam/opencode-commit@latest"]
 }
 ```
 
@@ -43,6 +45,8 @@ OpenCode 会在下次启动时自动安装。
 2. 生成中文约定式提交信息
 3. 展示供你确认
 4. 确认后执行 `git commit`
+
+> 注：V1 的 `subtask`（子代理中执行命令）在 V2 插件命令上无对应字段，`/commit` 在当前会话内执行。如需子代理行为，可在 `.opencode/commands/` 自行定义命令文件（V2 配置层支持 `subagent: true`）。
 
 ### 提交信息格式
 
@@ -68,6 +72,7 @@ OpenCode 会在下次启动时自动安装。
 bun install
 bun dev          # 加载插件启动 OpenCode
 bun typecheck    # 类型检查
+bun test         # 运行单元测试
 ```
 
 ## License
