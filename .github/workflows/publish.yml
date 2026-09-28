@@ -37,7 +37,11 @@ jobs:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
 
+      # npm Trusted Publishing（OIDC）要求 npm CLI ≥11.5.1，node 22 自带的 npm 10 不够
+      - name: 升级 npm
+        run: npm install -g npm@latest
+
+      # OIDC 免 token 发布：无需 NODE_AUTH_TOKEN，身份由 GitHub OIDC 短时令牌提供，
+      # 需在 npmjs.com 包设置页将 Trusted Publisher 配置为本仓库与本 workflow 文件名
       - name: 发布到 npm
         run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
