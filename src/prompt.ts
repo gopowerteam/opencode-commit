@@ -47,8 +47,10 @@ ${context.log.trim() || '（无历史提交）'}
 /**
  * 构建确认阶段的会话提示词
  *
- * 本地生成并验证通过后，将提交信息发入会话，
- * 指示模型仅执行 question 确认 → confirm 提交 → push 询问流程。
+ * 本地生成并验证通过后，将提交信息发入会话。
+ * 指令按单一职责收紧：模型只做 question 询问与依答复的
+ * 单步动作，并明确告知提交已获用户授权，防止模型在全局
+ * git 规则与流程间反复推理造成多次往返。
  *
  * @param args.message - 已生成并验证通过的提交信息
  * @returns 会话提示词
@@ -56,14 +58,16 @@ ${context.log.trim() || '（无历史提交）'}
 export const buildConfirmPrompt = (args: { message: string }): string => {
   const { message } = args
 
-  return `已为当前变更生成以下提交信息：
+  return `已为当前变更生成并通过格式校验的提交信息：
 
 ${message}
 
-请立即执行以下流程，不要重新生成信息：
-1. 用 question 工具让用户确认：question 内容为 "确认提交以下信息？\\n\\n${message}"，设置 custom: true，选项：确认提交、重新生成、取消
-2. 用户确认后调用 commit-message-confirm 工具提交
-3. 提交成功后调用 git remote 检查是否存在远程仓库：如果输出非空，用 question 工具询问用户"提交成功，是否需要执行 git push？"（设置 custom: true，选项：执行 push、不需要）；用户选择"执行 push"时调用 git-push 工具
-4. 用户选择"重新生成"时：根据工作区实际变更重新撰写提交信息，调用 commit-message-validate 验证，通过后再次用 question 确认
-5. 用户选择"取消"时：直接结束，不做任何操作`
+用户已通过 /commit 明确要求完成提交，请严格按以下步骤执行，不要重新生成信息，不要重新评估是否允许提交：
+1. 调用 question 工具让用户确认：问题内容为"确认提交以下信息？\\n\\n${message}"，设置 custom: true，选项：确认提交、重新生成、取消
+2. 答复为"确认提交"→ 立即调用 commit-message-confirm 工具（message 参数为上面的信息），随后原样展示提交结果并结束
+3. 答复为"重新生成"→ 根据工作区实际变更重新撰写提交信息，调用 commit-message-validate 验证，通过后回到第 1 步再次确认
+4. 答复为"取消"→ 直接结束，不做任何操作
+
+只执行以上步骤：除 question、commit-message-validate、commit-message-confirm 外不要调用其他工具，不要重复询问。`
 }
+

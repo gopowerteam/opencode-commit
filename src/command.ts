@@ -186,17 +186,17 @@ export const registerCommitCommand = async (
           return
         }
 
+        const generateDeps = {
+          generate: (input: { model: ModelRef; prompt: string }) => ctx.generate.text(input),
+          validate: (message: string) => validateCommitMessage(message, config),
+          guide,
+          context: collected.data,
+          model,
+          extra,
+        }
+
         // 单次模型生成 + 本地校验重试
-        const generated = await safeAsync(() =>
-          generateValidMessage({
-            generate: (input) => ctx.generate.text(input),
-            validate: (message) => validateCommitMessage(message, config),
-            guide,
-            context: collected.data,
-            model,
-            extra,
-          }),
-        )
+        let generated = await safeAsync(() => generateValidMessage(generateDeps))
 
         if (generated.error) {
           const reason =
@@ -216,7 +216,7 @@ export const registerCommitCommand = async (
           return
         }
 
-        // 确认阶段交回会话（交互必需）
+        // 确认阶段交回会话（V2 插件上下文无自建表单通道，question 工具是唯一宿主交互机制）
         await ctx.session.prompt({
           sessionID: invocation.sessionID,
           text: buildConfirmPrompt({ message: generated.data }),

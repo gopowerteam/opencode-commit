@@ -43,16 +43,17 @@ describe('buildGeneratePrompt', () => {
 })
 
 describe('buildConfirmPrompt', () => {
-  test('包含生成的提交信息与确认流程', () => {
+  test('包含提交信息、三选项与防摇摆指令', () => {
     const prompt = buildConfirmPrompt({ message: 'feat: ✨ 添加用户登录功能' })
     expect(prompt).toContain('feat: ✨ 添加用户登录功能')
     // 确认交互三选项
     expect(prompt).toContain('确认提交')
     expect(prompt).toContain('重新生成')
     expect(prompt).toContain('取消')
-    // 确认后走 confirm 工具提交
+    // 已获授权声明 + 单一职责约束（防模型反复推理）
+    expect(prompt).toContain('用户已通过 /commit 明确要求完成提交')
     expect(prompt).toContain('commit-message-confirm')
-    // 提交成功后询问 push
-    expect(prompt).toContain('git-push')
+    expect(prompt).toContain('不要重复询问')
   })
 })
+
