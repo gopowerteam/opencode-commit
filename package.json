@@ -25,12 +25,6 @@
 		"typecheck": "tsc --noEmit",
 		"release": "bumpp"
 	},
-	"bumpp": {
-		"commit": "chore: release v%s",
-		"tag": "v%s",
-		"push": true,
-		"execute": "bun run build && npm publish"
-	},
 	"peerDependencies": {
 		"@opencode/plugin": ">=2.0.0"
 	},
