@@ -21,7 +21,7 @@ OpenCode 插件 - 根据 Git 变更自动生成中文约定式提交信息。
 使用 CLI 命令安装：
 
 ```bash
-opencode plugin @gopowerteam/opencode-commit -g
+opencode plugin add @gopowerteam/opencode-commit
 ```
 
 或者在 `opencode.json`（全局或项目级）中手动添加：
