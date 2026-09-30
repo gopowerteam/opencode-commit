@@ -1,6 +1,6 @@
 {
 	"name": "@gopowerteam/opencode-commit",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "OpenCode 插件 - 根据 Git 变更自动生成中文约定式提交信息",
 	"keywords": [
 		"opencode",
