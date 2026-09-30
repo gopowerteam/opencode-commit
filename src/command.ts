@@ -85,6 +85,23 @@ export const parseCommitArgs = (text?: string): CommitArgs => {
 }
 
 /**
+ * 构建生成阶段的状态消息
+ *
+ * 命令 execute 期间宿主没有 progress 通道，唯一可用的即时反馈
+ * 是 synthetic 会话消息：在进入模型生成（最长静默期）前发出，
+ * 告知用户变更规模与所用模型，消除"是否在执行"的疑虑。
+ *
+ * @param context - git 上下文（status 用于统计变更文件数）
+ * @param model - 生成所用模型
+ * @returns 状态消息文本
+ */
+export const buildProgressMessage = (context: GitContext, model: ModelRef): string => {
+  const files = context.status.split('\n').filter((line) => line.trim()).length
+  const scale = files > 0 ? `已暂存 ${files} 个文件变更` : '未检测到文件变更'
+  return `/commit ${scale}，正在生成提交信息（模型 ${model.providerID}/${model.id}）…`
+}
+
+/**
  * 从模型输出中提取提交信息
  *
  * 容忍模型违反"只输出信息本身"的指令：
@@ -233,6 +250,13 @@ export const registerCommitCommand = async (
           })
           return
         }
+
+        // 生成前发出状态消息：命令执行无 progress 通道，synthetic 是唯一即时反馈，
+        // 让用户在模型生成的长静默期明确知道命令正在执行
+        await ctx.session.synthetic({
+          sessionID: invocation.sessionID,
+          text: buildProgressMessage(collected.data, model),
+        })
 
         const generateDeps = {
           generate: (input: { model: ModelRef; prompt: string }) => ctx.generate.text(input),

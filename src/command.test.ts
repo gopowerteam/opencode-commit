@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { CommitError } from './errors.js'
-import { extractMessage, generateValidMessage, parseCommitArgs, resolveModel } from './command.js'
+import { buildProgressMessage, extractMessage, generateValidMessage, parseCommitArgs, resolveModel } from './command.js'
 
 describe('parseCommitArgs', () => {
   test('-y 标记快速模式', () => {
@@ -135,6 +135,27 @@ describe('generateValidMessage', () => {
       }),
     )
     await expectation.rejects.toThrow('无效的提交类型')
+  })
+})
+
+describe('buildProgressMessage', () => {
+  test('包含变更文件数与模型名', () => {
+    const message = buildProgressMessage(
+      { status: 'M  a.ts\nA  b.ts\n?? c.ts\n', diff: 'd', log: 'l' },
+      { providerID: 'anthropic', id: 'claude-x' },
+    )
+    expect(message).toContain('3 个文件')
+    expect(message).toContain('anthropic/claude-x')
+    expect(message).toContain('正在生成提交信息')
+  })
+
+  test('无变更时不显示文件数', () => {
+    const message = buildProgressMessage(
+      { status: '', diff: '', log: 'l' },
+      { providerID: 'openai', id: 'gpt-x' },
+    )
+    expect(message).toContain('未检测到文件变更')
+    expect(message).toContain('openai/gpt-x')
   })
 })
 
